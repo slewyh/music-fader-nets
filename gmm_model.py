@@ -20,7 +20,8 @@ class MusicAttrRegGMVAE(nn.Module):
                  hidden_dims,
                  z_dims,
                  n_step,
-                 n_component=4):
+                 n_component=4,
+                 device='CPU'):
 
         super(MusicAttrRegGMVAE, self).__init__()
 
@@ -28,7 +29,8 @@ class MusicAttrRegGMVAE(nn.Module):
         self.latent_dim = z_dims
         self.roll_dims = roll_dims
         self.eps = 100
-        
+        self.device = device
+        print(self.device)
         # encoder
         self.gru_r = nn.GRU(roll_dims, hidden_dims, batch_first=True, bidirectional=True)
         self.gru_n = nn.GRU(roll_dims, hidden_dims, batch_first=True, bidirectional=True)
@@ -75,7 +77,7 @@ class MusicAttrRegGMVAE(nn.Module):
         x = torch.zeros_like(x)
         arange = torch.arange(x.size(0)).long()
         if torch.cuda.is_available():
-            arange = arange.cuda()
+            arange = arange.to(device=self.device)
         x[arange, idx] = 1
         return x
 
@@ -117,7 +119,7 @@ class MusicAttrRegGMVAE(nn.Module):
         return rhythm_out, note_out, 0, 0
     
     def global_decoder(self, z, steps):
-        out = torch.zeros((z.size(0), self.roll_dims)).cuda()
+        out = torch.zeros((z.size(0), self.roll_dims), device=self.device)
         out[:, -1] = 1.
         x, hx = [], [None, None]
         t = self.linear_init_global(z)
@@ -209,9 +211,9 @@ class MusicAttrRegGMVAE(nn.Module):
             llh = torch.sum(llh, dim=1)  # sum over dimensions
             return llh
 
-        logLogit_qy_x = torch.zeros(z.shape[0], n_component).cuda()  # log-logit of q(y|x)
+        logLogit_qy_x = torch.zeros(z.shape[0], n_component).to(device=self.device) # log-logit of q(y|x)
         for k_i in torch.arange(0, n_component):
-            mu_k, logvar_k = mu_lookup(k_i.cuda()), logvar_lookup(k_i.cuda())
+            mu_k, logvar_k = mu_lookup(k_i.to(device=self.device)), logvar_lookup(k_i.to(device=self.device))
             logLogit_qy_x[:, k_i] = log_gauss_lh(z, mu_k, logvar_k) + np.log(1 / n_component)
 
         qy_x = torch.nn.functional.softmax(logLogit_qy_x, dim=1)
@@ -227,7 +229,7 @@ class MusicAttrRegGMVAE(nn.Module):
         dis_r, dis_n = self.encode(x)
         
         def repar(mu, stddev, sigma=1):
-            eps = Normal(0, sigma).sample(sample_shape=stddev.size()).cuda()
+            eps = Normal(0, sigma).sample(sample_shape=stddev.size()).to(device=self.device)
             z = mu + stddev * eps  # reparameterization trick
             return z
 
@@ -318,7 +320,7 @@ class MusicAttrSingleGMVAE(nn.Module):
         return Normal(mu, var)
 
     def global_decoder(self, z, steps):
-        out = torch.zeros((z.size(0), self.roll_dims)).cuda()
+        out = torch.zeros((z.size(0), self.roll_dims)).to(device=self.device)
         out[:, -1] = 1.
         x, hx = [], [None, None]
         t = self.linear_init_global(z)
@@ -398,9 +400,9 @@ class MusicAttrSingleGMVAE(nn.Module):
             llh = torch.sum(llh, dim=1)  # sum over dimensions
             return llh
 
-        logLogit_qy_x = torch.zeros(z.shape[0], n_component).cuda()  # log-logit of q(y|x)
+        logLogit_qy_x = torch.zeros(z.shape[0], n_component).to(device=self.device)  # log-logit of q(y|x)
         for k_i in torch.arange(0, n_component):
-            mu_k, logvar_k = mu_lookup(k_i.cuda()), logvar_lookup(k_i.cuda())
+            mu_k, logvar_k = mu_lookup(k_i.to(device=self.device)), logvar_lookup(k_i.to(device=self.device))
             logLogit_qy_x[:, k_i] = log_gauss_lh(z, mu_k, logvar_k) + np.log(1 / n_component)
 
         qy_x = torch.nn.functional.softmax(logLogit_qy_x, dim=1)
@@ -417,7 +419,7 @@ class MusicAttrSingleGMVAE(nn.Module):
         dis = self.encode(x)
         
         def repar(mu, stddev, sigma=1):
-            eps = Normal(0, sigma).sample(sample_shape=stddev.size()).cuda()
+            eps = Normal(0, sigma).sample(sample_shape=stddev.size()).to(device=self.device)
             z = mu + stddev * eps  # reparameterization trick
             return z
 
